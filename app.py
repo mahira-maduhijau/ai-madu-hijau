@@ -1,62 +1,57 @@
 import streamlit as st
-import google.generativeai as genai
+from openai import OpenAI
 
-# --- 1. KONFIGURASI API ---
-api_key = st.secrets.get("GENAI_API_KEY")
+# --- 1. KONFIGURASI OPENAI ---
+# Ganti nama di Secrets Streamlit menjadi: OPENAI_API_KEY
+api_key = st.secrets.get("OPENAI_API_KEY")
 
 if not api_key:
-    st.error("API Key tidak ditemukan di Secrets!")
+    st.error("API Key OpenAI tidak ditemukan di Secrets!")
     st.stop()
 
-genai.configure(api_key=api_key)
+client = OpenAI(api_key=api_key)
 
-# --- 2. DATA PRODUK ---
-KNOWLEDGE_BASE = "Kamu adalah Mahira, asisten ramah Madu Hijau. Produk ini untuk asam lambung, harga 150rb. Jika bingung atau user marah, minta maaf dan katakan akan panggil Admin."
+# --- 2. KNOWLEDGE BASE MADU HIJAU ---
+KNOWLEDGE_BASE = """
+Kamu adalah Mahira, Customer Service Madu Hijau yang ramah dan solutif.
+Profil: Madu Hijau Original untuk asam lambung, kembung, dan perih.
+Harga: 150rb/botol. Promo: 2 botol 250rb.
+Aturan: Gunakan panggilan 'Kak'. Jika user komplain berat, katakan akan disambungkan ke Admin.
+"""
 
-# --- 3. LOGIKA PENCARIAN MODEL YANG AKTIF ---
-@st.cache_resource
-def get_working_model():
-    try:
-        # Mencari model yang mendukung 'generateContent' di akunmu
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                # Mengutamakan flash, tapi jika tidak ada ambil apa saja yang tersedia
-                if 'gemini-1.5-flash' in m.name or 'gemini-pro' in m.name:
-                    return genai.GenerativeModel(m.name)
-        # Jika tidak ketemu di list, paksa pakai gemini-1.5-flash tanpa prefix
-        return genai.GenerativeModel('gemini-1.5-flash')
-    except Exception as e:
-        return None
-
-model = get_working_model()
-
-# --- 4. UI CHAT ---
-st.set_page_config(page_title="Asisten Mahira", page_icon="🍯")
-st.title("🍯 Chat dengan Mahira")
+# --- 3. UI STREAMLIT ---
+st.set_page_config(page_title="Mahira - Madu Hijau", page_icon="🍯")
+st.title("🍯 Chat dengan Mahira (OpenAI)")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+# Tampilkan riwayat chat
+for m in st.session_state.messages:
+    with st.chat_message(m["role"]):
+        st.markdown(m["content"])
 
-if prompt := st.chat_input("Tanya Mahira..."):
+# Input Chat
+if prompt := st.chat_input("Ada yang bisa Mahira bantu?"):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        if model is None:
-            st.error("Gagal mendapatkan akses ke model Gemini. Cek apakah API Key Anda aktif.")
-        else:
-            try:
-                # Menambahkan konteks agar Mahira tahu identitasnya
-                full_query = f"{KNOWLEDGE_BASE}\n\nPertanyaan User: {prompt}"
-                response = model.generate_content(full_query)
-                res_text = response.text
-                
-                st.markdown(res_text)
-                st.session_state.messages.append({"role": "assistant", "content": res_text})
-            except Exception as e:
-                st.error(f"Koneksi terputus: {str(e)}")
+        try:
+            # Memanggil model GPT-4o-mini (Sangat pintar & paling murah)
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": KNOWLEDGE_BASE},
+                    *[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
+                ],
+                temperature=0.7
+            )
+            
+            res_text = response.choices[0].message.content
+            st.markdown(res_text)
+            st.session_state.messages.append({"role": "assistant", "content": res_text})
+            
+        except Exception as e:
+            st.error(f"Terjadi kendala: {str(e)}")
