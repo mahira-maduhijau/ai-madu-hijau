@@ -23,7 +23,7 @@ LEGALITAS: BPOM RI TR203611111 & Halal MUI.
 # Menggunakan 'gemini-1.5-flash' tanpa prefix models/ untuk kestabilan di Streamlit
 try:
     model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash", 
+        model_name="gemini-pro", 
         system_instruction=f"Kamu adalah Sarah, CS Madu Hijau yang ramah. Gunakan data ini: {KNOWLEDGE_BASE}. Jika ada keluhan berat atau user minta bicara ke orang, katakan kamu akan sambungkan ke Admin (tulis teks: [OPER_KE_ADMIN])."
     )
 except:
