@@ -1,16 +1,15 @@
 import streamlit as st
 import google.generativeai as genai
 
-# --- 1. KONFIGURASI API (AMANKAN DENGAN SECRETS) ---
+# --- 1. KONFIGURASI API ---
 try:
-    # Mengambil API Key dari Advanced Settings > Secrets di Streamlit Cloud
     GENAI_API_KEY = st.secrets["GENAI_API_KEY"]
     genai.configure(api_key=GENAI_API_KEY)
-except:
-    st.error("Waduh, API Key belum terpasang di Secrets! Silakan cek menu Advanced Settings.")
+except Exception as e:
+    st.error("API Key tidak ditemukan di Secrets. Pastikan sudah diisi di Advanced Settings.")
     st.stop()
 
-# --- 2. DATA MADU HIJAU (KNOWLEDGE BASE) ---
+# --- 2. DATA MADU HIJAU ---
 KNOWLEDGE_BASE = """
 PROFIL PRODUK: Madu Hijau Original.
 MANFAAT: Membantu meredakan asam lambung (GERD), kembung, perih, dan meningkatkan imun.
@@ -21,8 +20,9 @@ LEGALITAS: BPOM RI TR203611111 & Halal MUI.
 """
 
 # --- 3. LOGIKA AI ---
+# Menggunakan models/gemini-1.5-flash untuk kompatibilitas lebih baik
 model = genai.GenerativeModel(
-    model_name="gemini-1.5-flash",
+    model_name="models/gemini-1.5-flash", 
     system_instruction=f"Kamu adalah Sarah, CS Madu Hijau yang ramah. Gunakan data ini: {KNOWLEDGE_BASE}. Jika ada keluhan berat atau user minta bicara ke orang, katakan kamu akan sambungkan ke Admin (tulis teks: [OPER_KE_ADMIN])."
 )
 
@@ -50,13 +50,19 @@ if prompt := st.chat_input("Ada yang bisa Sarah bantu?"):
         if st.session_state.status == "HUMAN":
             res = "⏳ *Admin sedang memproses chat Anda...*"
         else:
-            chat = model.start_chat(history=[{"role": m["role"], "parts": [m["content"]]} for m in st.session_state.messages[:-1]])
-            res = chat.send_message(prompt).text
-            
-            if "[OPER_KE_ADMIN]" in res or "admin" in prompt.lower():
-                st.session_state.status = "HUMAN"
-                res = "Maaf Kak, Sarah sambungkan ke Admin Konsultan ya. Mohon tunggu sebentar."
-                st.sidebar.error("⚠️ NOTIFIKASI: Admin dibutuhkan!")
+            try:
+                # Menambahkan history chat agar AI ingat konteks
+                history_parts = [{"role": m["role"], "parts": [m["content"]]} for m in st.session_state.messages[:-1]]
+                chat = model.start_chat(history=history_parts)
+                response = chat.send_message(prompt)
+                res = response.text
+                
+                if "[OPER_KE_ADMIN]" in res or "admin" in prompt.lower():
+                    st.session_state.status = "HUMAN"
+                    res = "Maaf Kak, Sarah sambungkan ke Admin Konsultan ya. Mohon tunggu sebentar."
+                    st.sidebar.error("⚠️ NOTIFIKASI: Admin dibutuhkan!")
+            except Exception as e:
+                res = f"Maaf Kak, sedang ada kendala teknis. Boleh coba lagi? (Error: {str(e)})"
         
         st.markdown(res)
         st.session_state.messages.append({"role": "assistant", "content": res})
